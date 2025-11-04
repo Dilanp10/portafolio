@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import ima1 from "../imagenes/vetcare/ima1.png";
 import ima2 from "../imagenes/vetcare/ima2.png";
@@ -13,7 +13,6 @@ import m1 from '../imagenes/mcdb/m1.png'
 import m2 from '../imagenes/mcdb/m2.png'
 import m3 from '../imagenes/mcdb/m3.png'
 
-
 export default function LandingPage() {
   const projects = [
     {
@@ -25,7 +24,6 @@ export default function LandingPage() {
       tech: ["React", "Tailwind", "Node.js", "Express", "MongoDB", "JWT"],
       demo: "https://remarkable-cajeta-23ef55.netlify.app/",
       repo: "https://github.com/Dilanp10/tuamigofiel1",
-      // Usamos las imágenes importadas acá
       images: [ima1, ima2, ima3],
     },
     {
@@ -73,7 +71,7 @@ export default function LandingPage() {
     visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 120 } },
   };
 
-  // Glow cursor logic (igual que antes)
+  // Glow cursor logic (mejor soporte para touch y accesibilidad)
   const glowRef = useRef(null);
   const posRef = useRef({
     x: typeof window !== "undefined" ? window.innerWidth / 2 : 0,
@@ -105,13 +103,21 @@ export default function LandingPage() {
     const onMove = (e) => {
       posRef.current.tx = e.clientX;
       posRef.current.ty = e.clientY;
-      if (!sawFirstMove) {
-        console.log("Glow: mouse detected — debería moverse el efecto");
-        sawFirstMove = true;
-      }
+      if (!sawFirstMove) sawFirstMove = true;
+    };
+
+    // Touch support: follow the first touch
+    const onTouch = (e) => {
+      if (!e.touches || e.touches.length === 0) return;
+      const t = e.touches[0];
+      posRef.current.tx = t.clientX;
+      posRef.current.ty = t.clientY;
+      if (!sawFirstMove) sawFirstMove = true;
     };
 
     window.addEventListener("mousemove", onMove, { passive: true });
+    window.addEventListener("touchstart", onTouch, { passive: true });
+    window.addEventListener("touchmove", onTouch, { passive: true });
 
     const addHoverListeners = () => {
       const triggers = document.querySelectorAll(".glow-trigger");
@@ -145,6 +151,9 @@ export default function LandingPage() {
         };
         el.addEventListener("mouseenter", enter);
         el.addEventListener("mouseleave", leave);
+        // For touch devices, increase glow briefly on touchstart
+        el.addEventListener("touchstart", enter, { passive: true });
+        el.addEventListener("touchend", leave, { passive: true });
         el.__glowEnter = enter;
         el.__glowLeave = leave;
       });
@@ -167,15 +176,19 @@ export default function LandingPage() {
     return () => {
       cancelAnimationFrame(rafRef.current);
       window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("touchstart", onTouch);
+      window.removeEventListener("touchmove", onTouch);
       const triggers = document.querySelectorAll(".glow-trigger");
       triggers.forEach((el) => {
         if (el.__glowEnter) el.removeEventListener("mouseenter", el.__glowEnter);
         if (el.__glowLeave) el.removeEventListener("mouseleave", el.__glowLeave);
+        el.removeEventListener("touchstart", el.__glowEnter);
+        el.removeEventListener("touchend", el.__glowLeave);
       });
     };
   }, []);
 
-  // --- Lightbox / contact modal state ---
+  // Lightbox / contact modal state
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxImages, setLightboxImages] = useState([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -183,7 +196,8 @@ export default function LandingPage() {
   const [contactModalOpen, setContactModalOpen] = useState(false);
   const [contactProjectTitle, setContactProjectTitle] = useState(null);
 
-  // Open demo: either navigate or show contact modal
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   const handleOpenDemo = (p) => {
     const isDemoAvailable = p.demo && p.demo !== "#" && p.demo.trim() !== "";
     if (isDemoAvailable) {
@@ -194,7 +208,6 @@ export default function LandingPage() {
     }
   };
 
-  // Lightbox handlers
   const openLightbox = (images, startIndex = 0) => {
     setLightboxImages(images || []);
     setLightboxIndex(startIndex);
@@ -206,8 +219,7 @@ export default function LandingPage() {
     document.body.style.overflow = "";
   };
   const nextImage = () => setLightboxIndex((i) => (i + 1) % lightboxImages.length);
-  const prevImage = () =>
-    setLightboxIndex((i) => (i - 1 + lightboxImages.length) % lightboxImages.length);
+  const prevImage = () => setLightboxIndex((i) => (i - 1 + lightboxImages.length) % lightboxImages.length);
 
   // keyboard navigation for lightbox
   useEffect(() => {
@@ -220,6 +232,18 @@ export default function LandingPage() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [lightboxOpen, lightboxImages]);
+
+  // Accessibility: close mobile menu on resize to larger screens
+  useEffect(() => {
+    const onResize = () => {
+      if (window.innerWidth >= 768) setMobileMenuOpen(false);
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  // small helper for safe external links
+  const safeLinkProps = (url) => (url && url !== "#" ? { href: url, target: "_blank", rel: "noopener noreferrer" } : { href: "#" });
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 via-indigo-950 to-gray-900 text-white antialiased relative">
@@ -250,24 +274,19 @@ export default function LandingPage() {
 
       {/* NAV */}
       <header className="backdrop-blur-sm bg-gray-800/70 border-b border-gray-700 sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 bg-gradient-to-tr from-indigo-600 to-pink-500 rounded-full flex items-center justify-center text-white font-bold shadow-lg">
-              DP
-            </div>
+            <div className="w-11 h-11 bg-gradient-to-tr from-indigo-600 to-pink-500 rounded-full flex items-center justify-center text-white font-bold shadow-lg">DP</div>
             <div>
               <h1 className="text-lg font-semibold tracking-tight">Dilan Perea</h1>
               <p className="text-xs text-gray-300">Full Stack Developer — React & Node</p>
             </div>
           </div>
 
-          <nav className="flex items-center gap-4">
-            <a href="#projects" className="text-sm hover:underline hover:text-indigo-300 transition glow-trigger">
-              Proyectos
-            </a>
-            <a href="#about" className="text-sm hover:underline hover:text-indigo-300 transition glow-trigger">
-              Sobre mí
-            </a>
+          {/* Desktop nav */}
+          <nav className="hidden md:flex items-center gap-4">
+            <a href="#projects" className="text-sm hover:underline hover:text-indigo-300 transition glow-trigger">Proyectos</a>
+            <a href="#about" className="text-sm hover:underline hover:text-indigo-300 transition glow-trigger">Sobre mí</a>
 
             <a
               href="/CV_Dilan_Leonel_Perea.pdf"
@@ -279,7 +298,43 @@ export default function LandingPage() {
               Ver CV
             </a>
           </nav>
+
+          {/* Mobile menu button */}
+          <div className="md:hidden">
+            <button
+              onClick={() => setMobileMenuOpen((s) => !s)}
+              aria-expanded={mobileMenuOpen}
+              aria-label="Abrir menú"
+              className="p-2 rounded-md bg-gray-800/60 border border-gray-700"
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                {mobileMenuOpen ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                )}
+              </svg>
+            </button>
+          </div>
         </div>
+
+        {/* Mobile nav panel */}
+        <AnimatePresence>
+          {mobileMenuOpen && (
+            <motion.nav
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="md:hidden bg-gray-800/80 border-t border-gray-700"
+            >
+              <div className="px-6 py-4 flex flex-col gap-3">
+                <a href="#projects" onClick={() => setMobileMenuOpen(false)} className="py-2 text-sm">Proyectos</a>
+                <a href="#about" onClick={() => setMobileMenuOpen(false)} className="py-2 text-sm">Sobre mí</a>
+                <a href="/CV_Dilan_Leonel_Perea.pdf" className="py-2 text-sm">Ver CV</a>
+              </div>
+            </motion.nav>
+          )}
+        </AnimatePresence>
       </header>
 
       {/* HERO */}
@@ -287,35 +342,33 @@ export default function LandingPage() {
         <div aria-hidden className="absolute -left-20 -top-40 w-96 h-96 bg-gradient-to-tr from-pink-700/30 to-indigo-700/30 rounded-full filter blur-3xl opacity-40 transform rotate-12" />
         <div aria-hidden className="absolute right-0 top-20 w-80 h-80 bg-gradient-to-br from-yellow-600/20 to-pink-700/20 rounded-full filter blur-2xl opacity-30" />
 
-        <div className="max-w-7xl mx-auto px-6 py-24 grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+        <div className="max-w-7xl mx-auto px-6 py-20 md:py-24 grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
           <motion.div initial={{ x: -30, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ duration: 0.7 }}>
-            <h2 className="text-4xl md:text-5xl font-extrabold leading-tight mb-4">
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold leading-tight mb-4">
               Construyo proyectos digitales con{" "}
-              <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-pink-400">React</span>{" "}
-              y diseño pensado.
+              <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-pink-400">React</span>
+              {" "}y diseño pensado.
             </h2>
-            <p className="text-lg text-gray-300 mb-6">
+            <p className="text-base sm:text-lg text-gray-300 mb-6">
               Transformo ideas en aplicaciones robustas: paneles de administración, tiendas, CRMs y landing pages. Código mantenible, UX accesible y despliegue listo para producción.
             </p>
 
-            <div className="flex gap-4 items-center">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-start sm:items-center">
               <a
                 href="#projects"
-                className="relative inline-flex items-center gap-3 px-6 py-3 rounded-full bg-indigo-600 text-white font-semibold shadow-lg hover:scale-105 transform transition glow-trigger"
+                className="w-full sm:w-auto text-center relative inline-flex items-center justify-center gap-3 px-6 py-3 rounded-full bg-indigo-600 text-white font-semibold shadow-lg hover:scale-105 transform transition glow-trigger"
                 data-glow-size="620"
               >
                 Ver proyectos
               </a>
-              <a href="#about" className="inline-flex items-center gap-2 px-5 py-3 border border-gray-600 rounded-full font-semibold hover:bg-gray-800 transition glow-trigger">
+              <a href="#about" className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 border border-gray-600 rounded-full font-semibold hover:bg-gray-800 transition glow-trigger">
                 Contactar
               </a>
             </div>
 
-            <motion.div className="mt-8 flex flex-wrap gap-2" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}>
+            <motion.div className="mt-6 flex flex-wrap gap-2" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}>
               {["React", "Tailwind", "Node.js", "Express", "MongoDB", "SQLite", "JWT", "Bootstrap"].map((t) => (
-                <span key={t} className="text-xs px-3 py-1 bg-gray-800/60 border border-gray-700 rounded-full shadow-sm backdrop-blur-sm glow-trigger">
-                  {t}
-                </span>
+                <span key={t} className="text-xs px-3 py-1 bg-gray-800/60 border border-gray-700 rounded-full shadow-sm backdrop-blur-sm glow-trigger">{t}</span>
               ))}
             </motion.div>
           </motion.div>
@@ -359,8 +412,8 @@ export default function LandingPage() {
       </section>
 
       {/* PROJECTS */}
-      <motion.section id="projects" className="max-w-7xl mx-auto px-6 py-16" variants={container} initial="hidden" animate="visible">
-        <h3 className="text-3xl font-bold mb-6">Algunos de los Proyectos</h3>
+      <motion.section id="projects" className="max-w-7xl mx-auto px-6 py-12 md:py-16" variants={container} initial="hidden" animate="visible">
+        <h3 className="text-2xl md:text-3xl font-bold mb-6">Algunos de los Proyectos</h3>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {projects.map((p) => (
@@ -370,16 +423,14 @@ export default function LandingPage() {
               <div className="flex items-start gap-4">
                 <div className="w-14 h-14 rounded-lg bg-gradient-to-br from-indigo-600 to-pink-500 flex items-center justify-center text-white font-bold shadow">{p.id}</div>
                 <div className="flex-1">
-                  <h4 className="text-xl font-semibold">{p.title}</h4>
+                  <h4 className="text-lg font-semibold">{p.title}</h4>
                   <p className="text-sm text-gray-400 mb-3">{p.subtitle}</p>
 
                   <p className="text-gray-300 text-sm mb-4">{p.description}</p>
 
                   <div className="flex flex-wrap gap-2 mb-4">
                     {p.tech.map((t) => (
-                      <span key={t} className="text-xs px-3 py-1 bg-gray-700/60 border border-gray-600 rounded-full">
-                        {t}
-                      </span>
+                      <span key={t} className="text-xs px-3 py-1 bg-gray-700/60 border border-gray-600 rounded-full">{t}</span>
                     ))}
                   </div>
 
@@ -389,7 +440,7 @@ export default function LandingPage() {
                       <button
                         key={idx}
                         onClick={() => openLightbox(p.images, idx)}
-                        className="w-20 h-12 rounded-lg overflow-hidden border border-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="w-20 h-12 sm:w-24 sm:h-14 rounded-lg overflow-hidden border border-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         aria-label={`Abrir imagen ${idx + 1} de ${p.title}`}
                       >
                         <img src={img} alt={`${p.title} screenshot ${idx + 1}`} loading="lazy" className="w-full h-full object-cover" />
@@ -397,17 +448,17 @@ export default function LandingPage() {
                     ))}
                   </div>
 
-                  <div className="flex gap-3">
+                  <div className="flex flex-col sm:flex-row gap-3">
                     <button
                       onClick={() => handleOpenDemo(p)}
-                      className="text-sm inline-flex items-center gap-2 px-4 py-2 rounded-full border border-gray-600 font-semibold hover:shadow glow-trigger"
+                      className="text-sm inline-flex items-center gap-2 px-4 py-2 rounded-full border border-gray-600 font-semibold hover:shadow glow-trigger w-full sm:w-auto"
                       data-glow-size="420"
                     >
                       Ver demo
                     </button>
 
                     <a
-                      href={p.repo && p.repo !== "#" ? p.repo : undefined}
+                      {...safeLinkProps(p.repo)}
                       onClick={(e) => {
                         if (!p.repo || p.repo === "#") {
                           e.preventDefault();
@@ -415,11 +466,9 @@ export default function LandingPage() {
                           setContactModalOpen(true);
                         }
                       }}
-                      target={p.repo && p.repo !== "#" ? "_blank" : undefined}
-                      rel={p.repo && p.repo !== "#" ? "noopener noreferrer" : undefined}
                       className={`text-sm inline-flex items-center gap-2 px-4 py-2 rounded-full ${
                         p.repo && p.repo !== "#" ? "bg-gradient-to-r from-indigo-600 to-pink-500 text-white shadow hover:scale-105 transform transition" : "border border-gray-600 text-gray-300"
-                      } font-semibold`}
+                      } font-semibold w-full sm:w-auto`}
                     >
                       Repositorio
                     </a>
@@ -433,7 +482,7 @@ export default function LandingPage() {
 
       {/* ABOUT */}
       <section id="about" className="bg-gray-800 border-t border-gray-700">
-        <div className="max-w-7xl mx-auto px-6 py-16 grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="max-w-7xl mx-auto px-6 py-12 md:py-16 grid grid-cols-1 md:grid-cols-3 gap-8">
           <div className="md:col-span-2">
             <h3 className="text-2xl font-bold mb-4">Sobre mí</h3>
             <p className="text-gray-300 mb-4">
@@ -447,26 +496,20 @@ export default function LandingPage() {
               <li className="text-sm">• Testing y validaciones</li>
             </ul>
 
-            <div className="mt-6 flex gap-3">
-              <a className="px-5 py-3 rounded-full bg-indigo-600 text-white font-semibold shadow hover:scale-105 transform transition glow-trigger" data-glow-size="520" href="/CV_Dilan_Leonel_Perea.pdf">
+            <div className="mt-6 flex flex-col sm:flex-row gap-3">
+              <a className="w-full sm:w-auto px-5 py-3 rounded-full bg-indigo-600 text-white font-semibold shadow hover:scale-105 transform transition glow-trigger" data-glow-size="520" href="/CV_Dilan_Leonel_Perea.pdf">
                 Descargar CV
               </a>
-              <a href="https://github.com/Dilanp10" className="px-5 py-3 rounded-full border border-gray-600 font-semibold glow-trigger">Ver GitHub</a>
+              <a href="https://github.com/Dilanp10" className="w-full sm:w-auto px-5 py-3 rounded-full border border-gray-600 font-semibold glow-trigger">Ver GitHub</a>
             </div>
           </div>
 
           <aside className="p-6 bg-gradient-to-tr from-gray-800 to-indigo-900/30 rounded-2xl shadow-md border border-gray-700">
             <h4 className="font-semibold mb-2">Contacto</h4>
             <div className="flex flex-col gap-2">
-              <a href="mailto:dilanperea10@gmail.com" className="text-sm font-medium glow-trigger">
-               dilanperea10@gmail.com
-              </a>
-              <a href="tel:+5493834697224" className="text-sm font-medium glow-trigger">
-                +54 9 3834 697224
-              </a>
-              <a href="https://www.linkedin.com/in/dilan-perea-485a38361/" className="text-sm font-medium glow-trigger">
-                LinkedIn
-              </a>
+              <a href="mailto:dilanperea10@gmail.com" className="text-sm font-medium glow-trigger">dilanperea10@gmail.com</a>
+              <a href="tel:+5493834697224" className="text-sm font-medium glow-trigger">+54 9 3834 697224</a>
+              <a href="https://www.linkedin.com/in/dilan-perea-485a38361/" className="text-sm font-medium glow-trigger">LinkedIn</a>
             </div>
           </aside>
         </div>
@@ -491,7 +534,7 @@ export default function LandingPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
             aria-modal="true"
             role="dialog"
           >
@@ -510,8 +553,7 @@ export default function LandingPage() {
                 ✕
               </button>
 
-              {/* main image */}
-              <div className="w-full bg-black rounded-lg overflow-hidden">
+              <div className="w-full bg-black rounded-lg overflow-hidden flex items-center justify-center">
                 <motion.img
                   key={lightboxImages[lightboxIndex]}
                   src={lightboxImages[lightboxIndex]}
@@ -521,11 +563,10 @@ export default function LandingPage() {
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.98 }}
                   transition={{ duration: 0.25 }}
-                  className="w-full h-[60vh] object-contain bg-black"
+                  className="w-full max-h-[80vh] object-contain bg-black"
                 />
               </div>
 
-              {/* navigation */}
               {lightboxImages.length > 1 && (
                 <>
                   <button
@@ -545,8 +586,7 @@ export default function LandingPage() {
                 </>
               )}
 
-              {/* thumbnails */}
-              <div className="mt-3 flex gap-2 justify-center">
+              <div className="mt-3 flex gap-2 justify-center overflow-auto">
                 {lightboxImages.map((thumb, i) => (
                   <button
                     key={i}
@@ -571,9 +611,7 @@ export default function LandingPage() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
             <motion.div initial={{ y: 12 }} animate={{ y: 0 }} exit={{ y: 12 }} className="bg-gray-900 rounded-lg shadow-xl max-w-md w-full p-6 border border-gray-700">
               <h4 className="text-lg font-semibold mb-2">Demo no disponible</h4>
-              <p className="text-sm text-gray-300 mb-4">
-                La demo de <strong>{contactProjectTitle}</strong> no está disponible públicamente.
-              </p>
+              <p className="text-sm text-gray-300 mb-4">La demo de <strong>{contactProjectTitle}</strong> no está disponible públicamente.</p>
               <p className="text-sm text-gray-300 mb-4">Si querés verla, contactame y te paso acceso o una presentación rápida:</p>
               <div className="flex flex-col gap-2 mb-4">
                 <a href="mailto:dilanperea10@gmail.com" className="px-4 py-2 rounded-full bg-indigo-600 text-white text-center font-semibold">Enviar email</a>
