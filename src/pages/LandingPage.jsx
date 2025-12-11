@@ -44,7 +44,7 @@ export default function LandingPage() {
       description:
         "Plataforma para perfiles, recomendaciones por edad, favoritos y gestión de libros. Stack: React + Node + MongoDB. Auth con JWT.",
       tech: ["React", "Tailwind", "Node.js", "Express", "MongoDB", "JWT"],
-      demo: "https://radiant-monstera-2d8e15.netlify.app/",
+      demo: "https://funkabook.netlify.app/",
       repo: "https://github.com/Dilanp10/bookhive",
       images: [ book1,book2,book3],
     },
